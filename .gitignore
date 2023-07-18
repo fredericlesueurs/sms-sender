@@ -1,2 +1,5 @@
 .env
 /.idea
+sms-sender
+sms-sender.exe
+sms_sender.db
