@@ -11,8 +11,6 @@ require (
 	github.com/warthog618/modem v0.4.0
 	github.com/warthog618/sms v0.3.0
 	go.bug.st/serial v1.5.0
-	gorm.io/driver/sqlite v1.5.2
-	gorm.io/gorm v1.25.2
 )
 
 require (
@@ -26,8 +24,6 @@ require (
 	github.com/google/uuid v1.3.0 // indirect
 	github.com/hashicorp/hcl/v2 v2.13.0 // indirect
 	github.com/inconshreveable/mousetrap v1.1.0 // indirect
-	github.com/jinzhu/inflection v1.0.0 // indirect
-	github.com/jinzhu/now v1.1.5 // indirect
 	github.com/klauspost/compress v1.16.7 // indirect
 	github.com/mattn/go-colorable v0.1.13 // indirect
 	github.com/mattn/go-isatty v0.0.19 // indirect
