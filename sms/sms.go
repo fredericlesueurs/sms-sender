@@ -1,12 +1,13 @@
 package sms
 
 import (
+	"fmt"
+	"github.com/charmbracelet/log"
 	"github.com/warthog618/modem/at"
 	"github.com/warthog618/modem/gsm"
 	"github.com/warthog618/modem/serial"
 	smsSender "github.com/warthog618/sms"
 	"io"
-	"log"
 	"sms-sender/ent"
 	"time"
 )
@@ -16,16 +17,33 @@ type GsmConfig struct {
 	Baud int
 }
 
-type GSMSender struct {
-	gsm *gsm.GSM
+type Observer func(message *gsm.Message, err error)
+
+type Subject interface {
+	Register(observer Observer)
+	notifyAll(message *gsm.Message, err error)
 }
 
-func (gsmSender *GSMSender) Init(gsmConfig GsmConfig) error {
-	log.Println("Connecting to GSM modem...")
+type Sender interface {
+	SendSms(sms *ent.Sms) error
+}
+
+type Handler interface {
+	Register(observer Observer)
+	notifyAll(message gsm.Message, err error)
+}
+
+type GSMSender struct {
+	gsm       *gsm.GSM
+	observers []Observer
+}
+
+func CreateGSMSender(gsmConfig GsmConfig) (*GSMSender, error) {
+	log.Info("Connecting to GSM modem...")
 	m, err := serial.New(serial.WithPort(gsmConfig.Port), serial.WithBaud(gsmConfig.Baud))
 
 	if err != nil {
-		return err
+		return nil, err
 	}
 
 	var mio io.ReadWriter = m
@@ -34,14 +52,26 @@ func (gsmSender *GSMSender) Init(gsmConfig GsmConfig) error {
 
 	_, err = g.Command("+CREG?")
 	if err != nil {
-		return err
+		return nil, err
 	}
 
-	log.Println("Connected to GSM modem")
+	log.Info("Connected to GSM modem")
 
-	gsmSender.gsm = g
+	sender := GSMSender{gsm: g}
 
-	return nil
+	handler := func(message gsm.Message) {
+		sender.notifyAll(&message, nil)
+	}
+
+	errorHandler := func(error error) {
+		sender.notifyAll(nil, error)
+	}
+
+	err = g.StartMessageRx(handler, errorHandler)
+
+	log.Info("SMS handler ready")
+
+	return &sender, nil
 }
 
 func (gsmSender *GSMSender) SendSms(sms *ent.Sms) error {
@@ -53,26 +83,31 @@ func (gsmSender *GSMSender) SendSms(sms *ent.Sms) error {
 
 	start := time.Now()
 
-	for i, p := range pdus {
+	for _, p := range pdus {
 		tp, err := p.MarshalBinary()
 		if err != nil {
 			return err
 		}
-		mr, err := gsmSender.gsm.SendPDU(tp)
+		_, err = gsmSender.gsm.SendPDU(tp)
 		if err != nil {
 			// !!! check CPIN?? on failure to determine root cause??  If ERROR 302
 			return err
 		}
-		log.Printf("PDU %d: %v\n", i+1, mr)
 	}
 
 	processedTime := time.Now().Sub(start).Seconds()
 
-	log.Printf("Sended took %f seconds\n", processedTime)
+	log.Info(fmt.Sprintf("SMS send in %f seconds", processedTime), "smsRequest", sms.ID)
 
 	return nil
 }
 
-func (gsmSender *GSMSender) GetGSM() *gsm.GSM {
-	return gsmSender.gsm
+func (gsmSender *GSMSender) Register(observer Observer) {
+	gsmSender.observers = append(gsmSender.observers, observer)
+}
+
+func (gsmSender *GSMSender) notifyAll(message *gsm.Message, err error) {
+	for _, observer := range gsmSender.observers {
+		observer(message, err)
+	}
 }
